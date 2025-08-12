@@ -183,6 +183,12 @@ if __name__ == "__main__":
     print(link_df.head())
     print(content_df.head())
 
+    # 리스트 접근 확인 ------------
+    first_article_content = content_df.loc[0, "content_col"]
+
+    # 첫 번째 기사에서 첫 번째 문단
+    print(first_article_content[0])
+
     link_df.to_csv("link_df2.csv", index=False, encoding="utf-8-sig")
     content_df.to_csv("content_df2.csv", index=False, encoding="utf-8-sig")
 
