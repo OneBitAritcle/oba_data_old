@@ -81,9 +81,11 @@ with DAG(
         task_id="log_top5", 
         python_callable=log_top5_task
     )
-    t5 = PythonOperator(
-        task_id="crawl_contents",
-        python_callable=crawl_contents_task
-    )
 
-    t3 >> t4 >> t5
+    # 본문 크롤링 태스크
+    # t5 = PythonOperator(
+    #     task_id="crawl_contents",
+    #     python_callable=crawl_contents_task
+    # )
+
+    t3 >> t4 # >> t5
