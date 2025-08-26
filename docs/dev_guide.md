@@ -124,4 +124,4 @@ close #12
 
 ### 2. PR 템플릿: `변경 내역 & 이유 & 테스트 기록`
 
-### 3. GitHub Flow: `main → feature 브랜치 → PR → 리뷰 → 병합`
+### 3. GitHub Flow: `main → dev 브랜치 → PR → 리뷰 → 병합`
