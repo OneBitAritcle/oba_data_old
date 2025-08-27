@@ -13,7 +13,8 @@ def _ensure_tables(conn):
             article_order INT NOT NULL,
             url TEXT NOT NULL,
             dup_count INT DEFAULT 1,
-            is_used TINYINT(1) DEFAULT 0
+            is_used TINYINT(1) DEFAULT 0,
+            updated_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         );
     """)
     cur.execute("""
@@ -26,6 +27,15 @@ def _ensure_tables(conn):
             author VARCHAR(100),
             sub_col JSON,
             content_col JSON
+        );
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS today_article (
+            id BIGINT NOT NULL,
+            crawling_time DATETIME NOT NULL,
+            category VARCHAR(100) NOT NULL,
+            article_order INT NOT NULL,
+            url TEXT NOT NULL
         );
     """)
     conn.commit()
@@ -105,55 +115,74 @@ def upsert_today_links(conn, links):
 
         # 기존 되는 코드!
         # 1. url이 같은 기사(중복기사) 데이터 처리
-        # cur.execute("""UPDATE article_links AS a
-        #     -- today_article 테이블에서 집계 데이터를 가져오기 위해 JOIN
-        #     JOIN (
-        #     SELECT
-        #         url,
-        #         COUNT(*)            AS cnt,        -- 중복 개수
-        #         COALESCE(SUM(article_order), 0) AS sum_order
-        #     FROM today_article
-        #     GROUP BY url
-        #     ) AS t ON a.url = t.url
-        #     SET
-        #     a.dup_count     = a.dup_count + t.cnt,
-        #     a.article_order = a.article_order + t.sum_order
-        #     """)    
-        # conn.commit()
-
-        # 제니쓰 코드!
-        # 1. url이 같은 기사(중복기사) 데이터 처리 및 새로운 카테고리 추가
+        print(f"[DEBUG] today_article 테이블에 {len(rows)}개 행 삽입됨")
+        
+        # today_article 테이블의 중복 통계 확인
+        cur.execute("""
+            SELECT url, COUNT(*) as cnt
+            FROM today_article
+            GROUP BY url
+            ORDER BY cnt DESC
+            LIMIT 5
+        """)
+        dup_stats = cur.fetchall()
+        print(f"[DEBUG] today_article 중복 통계: {dup_stats}")
+        
+        # 중복 개수 업데이트
         cur.execute("""UPDATE article_links AS a
             -- today_article 테이블에서 집계 데이터를 가져오기 위해 JOIN
             JOIN (
             SELECT
-                t.url,
-                COUNT(*) AS cnt,        -- 중복 개수
-                COALESCE(SUM(t.article_order), 0) AS sum_order,
-                -- url별로 그룹화 후, article_links에 없는 새로운 카테고리들만 추출
-                (
-                    SELECT GROUP_CONCAT(DISTINCT ta.category)
-                    FROM today_article ta
-                    WHERE ta.url = t.url
-                    AND NOT FIND_IN_SET(ta.category, (
-                        SELECT GROUP_CONCAT(category) 
-                        FROM article_links al 
-                        WHERE al.url = ta.url
-                        GROUP BY al.url
-                    ))
-                ) AS new_categories
-            FROM today_article t
-            GROUP BY t.url
+                url,
+                COUNT(*)            AS cnt,        -- 중복 개수
+                COALESCE(SUM(article_order), 0) AS sum_order
+            FROM today_article
+            GROUP BY url
             ) AS t ON a.url = t.url
             SET
-            a.dup_count = a.dup_count + t.cnt,
-            a.article_order = a.article_order + t.sum_order,
-            -- new_categories가 NULL이 아닐 경우에만 기존 카테고리와 새 카테고리를 쉼표로 연결
-            a.category = IF(t.new_categories IS NOT NULL, 
-                        CONCAT_WS(',', a.category, t.new_categories), 
-                        a.category)
+            a.dup_count     = a.dup_count + t.cnt,
+            a.article_order = a.article_order + t.sum_order
             """)    
+        
+        # 업데이트된 행 수 확인
+        updated_rows = cur.rowcount
+        print(f"[DEBUG] 중복 개수 업데이트된 행 수: {updated_rows}")
+        
         conn.commit()
+
+        # 제니쓰 코드!
+        # 1. url이 같은 기사(중복기사) 데이터 처리 및 새로운 카테고리 추가
+        # cur.execute("""UPDATE article_links AS a
+        #     -- today_article 테이블에서 집계 데이터를 가져오기 위해 JOIN
+        #     JOIN (
+        #     SELECT
+        #         t.url,
+        #         COUNT(*) AS cnt,        -- 중복 개수
+        #         COALESCE(SUM(t.article_order), 0) AS sum_order,
+        #         -- url별로 그룹화 후, article_links에 없는 새로운 카테고리들만 추출
+        #         (
+        #             SELECT GROUP_CONCAT(DISTINCT ta.category)
+        #             FROM today_article ta
+        #             WHERE ta.url = t.url
+        #             AND NOT FIND_IN_SET(ta.category, (
+        #                 SELECT GROUP_CONCAT(category) 
+        #                 FROM article_links al 
+        #                 WHERE al.url = ta.url
+        #                 GROUP BY al.url
+        #             ))
+        #         ) AS new_categories
+        #     FROM today_article t
+        #     GROUP BY t.url
+        #     ) AS t ON a.url = t.url
+        #     SET
+        #     a.dup_count = a.dup_count + t.cnt,
+        #     a.article_order = a.article_order + t.sum_order,
+        #     -- new_categories가 NULL이 아닐 경우에만 기존 카테고리와 새 카테고리를 쉼표로 연결
+        #     a.category = IF(t.new_categories IS NOT NULL, 
+        #                 CONCAT_WS(',', a.category, t.new_categories), 
+        #                 a.category)
+        #     """)    
+        # conn.commit()
 
         # 2. 신규 기사 데이터 삽입
         cur.execute("""INSERT INTO article_links (id, crawling_time, category, article_order, url)
@@ -167,6 +196,11 @@ def upsert_today_links(conn, links):
                     LEFT JOIN article_links a ON t.url = a.url
                     WHERE a.url IS NULL
                     """)
+        
+        # 신규 삽입된 행 수 확인
+        new_rows = cur.rowcount
+        print(f"[DEBUG] 신규 기사 삽입된 행 수: {new_rows}")
+        
         conn.commit()
 
         # 오늘 테이블 비우기
@@ -191,7 +225,7 @@ def select_and_mark_top5(conn):
         SELECT id, crawling_time, category, url, dup_count
         FROM article_links
         WHERE is_used = 0
-        ORDER BY dup_count DESC, article_order DESC, updated_time DESC
+        ORDER BY dup_count DESC, article_order DESC, crawling_time DESC
         LIMIT 5;
     """)
     top5 = cur.fetchall()
