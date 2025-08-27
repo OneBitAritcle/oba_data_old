@@ -1,0 +1,29 @@
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.swp
+*.log
+*.sqlite3
+
+# --- Virtual environment ---
+venv/
+.env/
+.venv/
+
+# --- Airflow ---
+airflow/logs/
+airflow/tmp/
+airflow/unittests.cfg
+
+# --- OS / Editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# --- CSV, local data snapshot (optional) ---
+*.csv
+*.tsv
+*.parquet
