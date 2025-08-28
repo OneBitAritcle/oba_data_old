@@ -121,8 +121,39 @@ def upsert_article_contents(conn, contents):
             """)    
         conn.commit()
 
+        # 2. 카테고리 합치기 처리 (Python에서 처리)
+        # today_article에서 URL별로 모든 카테고리 수집
+        cur.execute("""
+            SELECT url, GROUP_CONCAT(DISTINCT category ORDER BY category) as all_categories
+            FROM today_article
+            GROUP BY url
+        """)
+        url_categories = cur.fetchall()
+        
+        # 각 URL에 대해 기존 카테고리와 새로운 카테고리 합치기
+        for url, new_categories in url_categories:
+            if new_categories:
+                # 기존 카테고리 가져오기
+                cur.execute("SELECT category FROM article_links WHERE url = %s", (url,))
+                result = cur.fetchone()
+                if result:
+                    existing_category = result[0] or ""
+                    
+                    # 기존 카테고리와 새로운 카테고리 합치기
+                    existing_list = [cat.strip() for cat in existing_category.split(',') if cat.strip()]
+                    new_list = [cat.strip() for cat in new_categories.split(',') if cat.strip()]
+                    
+                    # 중복 제거하고 정렬
+                    combined_categories = sorted(list(set(existing_list + new_list)))
+                    final_category = ','.join(combined_categories)
+                    
+                    # 업데이트
+                    cur.execute("UPDATE article_links SET category = %s WHERE url = %s", (final_category, url))
+        
+        conn.commit()
 
-        # 2. 신규 기사 데이터 삽입
+
+        # 3. 신규 기사 데이터 삽입
         cur.execute("""INSERT INTO article_links (id, crawling_time, category, article_order, url)
                     SELECT 
                         t.id,
@@ -158,7 +189,7 @@ def select_and_mark_top5(conn):
         SELECT id, crawling_time, category, url, dup_count
         FROM article_links
         WHERE is_used = 0
-        ORDER BY dup_count DESC, article_order DESC, updated_time DESC
+        ORDER BY dup_count DESC, article_order DESC, crawling_time DESC
         LIMIT 5;
     """)
     top5 = cur.fetchall()
