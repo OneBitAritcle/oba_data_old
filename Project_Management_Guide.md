@@ -1,4 +1,5 @@
 # Project Management Guide
+TEST용입니다.
 
 이 프로젝트는 **깃허브(GitHub) + 지라(Jira) + 노션(Notion)** 을 함께 활용하여 협업합니다.  
 아래 가이드를 참고해 모든 팀원이 동일한 프로세스와 규칙으로 일할 수 있도록 해주세요.
